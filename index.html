@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Daily Random Task Tracker</title>
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <meta name="description" content="Click once a day to get a random number (1-100), then mark success or failure and see your history. Data is saved locally in your browser.">
+</head>
+<body class="min-h-screen bg-gray-50 text-gray-900">
+  <div class="max-w-3xl mx-auto px-4 py-8">
+    <!-- Header -->
+    <header class="mb-6">
+      <h1 class="text-2xl md:text-3xl font-bold">Daily Random Task Tracker</h1>
+      <p class="text-sm text-gray-600">Click once per day to get a random number (1–100). Enter your number, then mark it as <span class="font-semibold">Successful</span> or <span class="font-semibold">Unsuccessful</span>. Your history is stored in your browser via <code>localStorage</code>.</p>
+    </header>
+
+    <!-- Card -->
+    <section class="bg-white shadow-sm rounded-2xl p-5 md:p-6 border border-gray-100">
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <div class="text-xs uppercase tracking-wide text-gray-500">Today</div>
+          <div id="todayDate" class="text-lg font-semibold">—</div>
+        </div>
+        <button id="generateBtn" class="px-4 py-2 rounded-xl bg-black text-white hover:opacity-90 active:opacity-100 transition disabled:opacity-50">Get Today's Number</button>
+      </div>
+
+      <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="p-4 rounded-xl bg-gray-100 text-center">
+          <div class="text-xs text-gray-600">Today's Target</div>
+          <div id="todayNumber" class="text-3xl font-bold">—</div>
+        </div>
+        <div class="sm:col-span-2">
+          <label for="enteredNumber" class="block text-sm font-medium mb-1">Enter your number (1–100)</label>
+          <input id="enteredNumber" type="number" min="1" max="100" inputmode="numeric" class="w-full px-3 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black" placeholder="e.g., 57" />
+          <p class="text-xs text-gray-500 mt-1">This field captures the number you want to associate with today's task. Then click one of the mark buttons below.</p>
+        </div>
+      </div>
+
+      <div class="mt-4 flex flex-wrap gap-3">
+        <button id="markSuccess" class="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">Mark Successful</button>
+        <button id="markFail" class="px-4 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50">Mark Unsuccessful</button>
+        <button id="clearToday" class="ml-auto px-3 py-2 rounded-xl bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50" title="Clear today's number so you can re-roll (does not touch history)">Clear Today's Number</button>
+      </div>
+
+      <p id="statusMsg" class="mt-3 text-sm"></p>
+    </section>
+
+    <!-- Stats -->
+    <section class="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="p-4 rounded-2xl bg-white border border-gray-100 shadow-sm text-center">
+        <div class="text-xs text-gray-600">Success Count</div>
+        <div id="successCount" class="text-2xl font-bold">0</div>
+      </div>
+      <div class="p-4 rounded-2xl bg-white border border-gray-100 shadow-sm text-center">
+        <div class="text-xs text-gray-600">Failure Count</div>
+        <div id="failCount" class="text-2xl font-bold">0</div>
+      </div>
+      <div class="p-4 rounded-2xl bg-white border border-gray-100 shadow-sm text-center">
+        <div class="text-xs text-gray-600">Total Logged Days</div>
+        <div id="totalDays" class="text-2xl font-bold">0</div>
+      </div>
+    </section>
+
+    <!-- History -->
+    <section class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-white border border-gray-100 shadow-sm rounded-2xl p-5">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold">Successful Tasks</h2>
+          <button id="exportSuccess" class="text-xs px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200">Export JSON</button>
+        </div>
+        <ul id="successList" class="mt-3 space-y-2 text-sm"></ul>
+      </div>
+
+      <div class="bg-white border border-gray-100 shadow-sm rounded-2xl p-5">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold">Unsuccessful Tasks</h2>
+          <button id="exportFail" class="text-xs px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200">Export JSON</button>
+        </div>
+        <ul id="failList" class="mt-3 space-y-2 text-sm"></ul>
+      </div>
+    </section>
+
+    <!-- Danger Zone -->
+    <section class="mt-8">
+      <details class="bg-white border border-rose-200 rounded-2xl p-5 shadow-sm">
+        <summary class="cursor-pointer font-semibold text-rose-700">Danger Zone: Clear All Data</summary>
+        <p class="text-sm text-gray-600 mt-2">This wipes today's number and your entire history from <code>localStorage</code>.</p>
+        <button id="clearAll" class="mt-3 px-4 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700">Clear Everything</button>
+      </details>
+    </section>
+
+    <footer class="mt-10 text-center text-xs text-gray-500">
+      <p>Data is stored locally in your browser using <code>localStorage</code>. You can export your history as JSON anytime.</p>
+    </footer>
+  </div>
+
+  <script>
+    // ---- Minimal persistent store helpers ----
+    const LS_KEYS = {
+      today: 'drtt_today',        // { date: 'YYYY-MM-DD', number: 1-100, enteredNumber?: n, status?: 'success'|'fail' }
+      success: 'drtt_success',    // [ { date, number, enteredNumber } ]
+      fail: 'drtt_fail'           // [ { date, number, enteredNumber } ]
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function todayISO() {
+      // Uses the user's local timezone
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function load(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function save(key, value) {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+
+    // ---- State ----
+    let state = {
+      today: load(LS_KEYS.today, null),
+      success: load(LS_KEYS.success, []),
+      fail: load(LS_KEYS.fail, [])
+    };
+
+    // ---- UI Bindings ----
+    const todayDateEl = $('todayDate');
+    const todayNumberEl = $('todayNumber');
+    const enteredNumberEl = $('enteredNumber');
+    const statusMsgEl = $('statusMsg');
+    const generateBtn = $('generateBtn');
+    const markSuccessBtn = $('markSuccess');
+    const markFailBtn = $('markFail');
+    const clearTodayBtn = $('clearToday');
+    const successListEl = $('successList');
+    const failListEl = $('failList');
+    const successCountEl = $('successCount');
+    const failCountEl = $('failCount');
+    const totalDaysEl = $('totalDays');
+    const exportSuccessBtn = $('exportSuccess');
+    const exportFailBtn = $('exportFail');
+    const clearAllBtn = $('clearAll');
+
+    // ---- Rendering ----
+    function renderToday() {
+      todayDateEl.textContent = todayISO();
+      if (state.today && state.today.date === todayISO()) {
+        todayNumberEl.textContent = state.today.number;
+        generateBtn.disabled = true;
+      } else {
+        todayNumberEl.textContent = '—';
+        generateBtn.disabled = false;
+      }
+
+      enteredNumberEl.value = state.today?.enteredNumber ?? '';
+
+      const hasTodayNumber = !!(state.today && state.today.date === todayISO());
+      markSuccessBtn.disabled = !hasTodayNumber;
+      markFailBtn.disabled = !hasTodayNumber;
+      clearTodayBtn.disabled = !hasTodayNumber;
+    }
+
+    function renderHistory() {
+      // Update counts
+      successCountEl.textContent = state.success.length;
+      failCountEl.textContent = state.fail.length;
+      totalDaysEl.textContent = state.success.length + state.fail.length;
+
+      // Render lists (newest first)
+      const successItems = [...state.success].sort((a,b)=>b.date.localeCompare(a.date));
+      const failItems = [...state.fail].sort((a,b)=>b.date.localeCompare(a.date));
+
+      successListEl.innerHTML = successItems.map(item => liTemplate(item, true)).join('') || emptyTemplate('No successful logs yet.');
+      failListEl.innerHTML = failItems.map(item => liTemplate(item, false)).join('') || emptyTemplate('No unsuccessful logs yet.');
+    }
+
+    function liTemplate(item, isSuccess) {
+      const badge = isSuccess ? '<span class="px-2 py-0.5 text-[10px] rounded-full bg-emerald-100 text-emerald-700">SUCCESS</span>'
+                              : '<span class="px-2 py-0.5 text-[10px] rounded-full bg-rose-100 text-rose-700">FAIL</span>';
+      return `
+        <li class="flex items-center gap-3 p-3 rounded-xl border border-gray-100">
+          ${badge}
+          <div class="flex-1">
+            <div class="font-medium">${item.date}</div>
+            <div class="text-gray-600">Target: <span class="font-semibold">${item.number}</span> · Entered: <span class="font-semibold">${item.enteredNumber ?? '—'}</span></div>
+          </div>
+        </li>
+      `;
+    }
+
+    function emptyTemplate(text) {
+      return `<li class="p-3 text-gray-500">${text}</li>`;
+    }
+
+    function flash(message, type = 'info') {
+      const colors = {
+        info: 'text-gray-700',
+        ok: 'text-emerald-700',
+        warn: 'text-amber-700',
+        err: 'text-rose-700'
+      };
+      statusMsgEl.className = `mt-3 text-sm ${colors[type] || colors.info}`;
+      statusMsgEl.textContent = message;
+      if (message) setTimeout(()=>{ statusMsgEl.textContent = ''; }, 4000);
+    }
+
+    // ---- Actions ----
+    function generateTodayNumber() {
+      // If already generated today, do nothing
+      if (state.today && state.today.date === todayISO()) {
+        flash("You've already generated today's number.", 'warn');
+        return;
+      }
+      const num = Math.floor(Math.random() * 100) + 1; // 1..100
+      state.today = { date: todayISO(), number: num };
+      save(LS_KEYS.today, state.today);
+      flash(`Today's number is ${num}.`, 'ok');
+      renderToday();
+    }
+
+    function mark(status) {
+      if (!(state.today && state.today.date === todayISO())) {
+        flash('Generate today\'s number first.', 'warn');
+        return;
+      }
+      // Validate input
+      const val = enteredNumberEl.value ? Number(enteredNumberEl.value) : null;
+      if (val === null || Number.isNaN(val) || val < 1 || val > 100) {
+        flash('Please enter a number between 1 and 100.', 'err');
+        enteredNumberEl.focus();
+        return;
+      }
+
+      // Update today
+      state.today.enteredNumber = val;
+      state.today.status = status; // 'success' | 'fail'
+      save(LS_KEYS.today, state.today);
+
+      // Append to history arrays if not already logged today (avoid duplicates)
+      const entry = { date: state.today.date, number: state.today.number, enteredNumber: val };
+      const arrKey = status === 'success' ? 'success' : 'fail';
+      const already = state[arrKey].some(x => x.date === entry.date);
+      const otherKey = status === 'success' ? 'fail' : 'success';
+      // Remove any entry for today from the opposite array to keep 1 log/day
+      state[otherKey] = state[otherKey].filter(x => x.date !== entry.date);
+
+      if (!already) state[arrKey].push(entry); else {
+        // Replace existing same-day entry
+        state[arrKey] = state[arrKey].map(x => x.date === entry.date ? entry : x);
+      }
+
+      save(LS_KEYS.success, state.success);
+      save(LS_KEYS.fail, state.fail);
+
+      renderHistory();
+      flash(status === 'success' ? 'Marked Successful. Nice!' : 'Marked Unsuccessful. Logged.');
+    }
+
+    function clearToday() {
+      // Only clear if today is set
+      if (state.today && state.today.date === todayISO()) {
+        localStorage.removeItem(LS_KEYS.today);
+        state.today = null;
+        renderToday();
+        flash("Cleared today's number. You can re-roll now.", 'info');
+      }
+    }
+
+    function clearAll() {
+      if (!confirm('This will delete ALL saved data (today + history). Continue?')) return;
+      localStorage.removeItem(LS_KEYS.today);
+      localStorage.removeItem(LS_KEYS.success);
+      localStorage.removeItem(LS_KEYS.fail);
+      state = { today: null, success: [], fail: [] };
+      renderToday();
+      renderHistory();
+      flash('All data cleared.');
+    }
+
+    function exportJSON(list, filename) {
+      const blob = new Blob([JSON.stringify(list, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ---- Init ----
+    function init() {
+      renderToday();
+      renderHistory();
+
+      generateBtn.addEventListener('click', generateTodayNumber);
+      markSuccessBtn.addEventListener('click', () => mark('success'));
+      markFailBtn.addEventListener('click', () => mark('fail'));
+      clearTodayBtn.addEventListener('click', clearToday);
+      clearAllBtn.addEventListener('click', clearAll);
+      exportSuccessBtn.addEventListener('click', () => exportJSON(state.success, 'success-history.json'));
+      exportFailBtn.addEventListener('click', () => exportJSON(state.fail, 'fail-history.json'));
+    }
+
+    init();
+  </script>
+</body>
+</html>
